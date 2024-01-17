@@ -1,0 +1,11 @@
+apiVersion: v2
+name: kube-secrets
+description: kube-secrets Helm Chart inflated by ArgoCD
+
+type: application
+
+# chart version
+version: "1.0.0"
+
+# kube-secrets version
+appVersion: "1.0.0"

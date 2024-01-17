@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}-service
+  namespace: {{ .Chart.Name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  selector: 
+    app: {{ .Chart.Name }}
+  ports:
+  - name: api
+    port: 9000
+    targetPort: 9000
