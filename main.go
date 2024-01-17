@@ -2,12 +2,8 @@ package main
 
 import (
 	"net/http"
-	"os"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -25,41 +21,32 @@ func main() {
 		panic(err.Error())
 	}
 
+	secretStore, err := NewK8sSecretStore(clientset)
+	if err != nil {
+		panic(err.Error())
+	}
+
 	r := gin.Default()
 	r.Any("/", func(c *gin.Context) {
-		ns, err := selfNamespace()
+		username, err := secretStore.Get(c, "test-credentials", "username")
 		if err != nil {
 			c.AbortWithError(500, err)
+			return
 		}
 
-		r := make(map[string]interface{})
-
-		r["namespace"] = ns
-
-		secrets := clientset.CoreV1().Secrets(ns)
-		kubesecretList, err := secrets.List(c, metav1.ListOptions{})
+		password, err := secretStore.Get(c, "test-credentials", "password")
 		if err != nil {
 			c.AbortWithError(500, err)
-		}
-		ss := make([]string, len(kubesecretList.Items))
-		for i, kubesecret := range kubesecretList.Items {
-			ss[i] = kubesecret.Name
+			return
 		}
 
-		r["secrets"] = ss
+		r := map[string]string{
+			"username": username,
+			"password": password,
+		}
+
 		c.JSON(http.StatusOK, r)
 
 	})
 	r.Run(":9000")
-}
-
-func selfNamespace() (ns string, err error) {
-	var fileData []byte
-	if fileData, err = os.ReadFile(cKubernetesNamespaceFile); err != nil {
-		err = errors.Wrapf(err, "error reading %s; can't get self pod", cKubernetesNamespaceFile)
-		return
-	}
-
-	ns = strings.TrimSpace(string(fileData))
-	return
 }
