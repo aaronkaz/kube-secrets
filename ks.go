@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -94,11 +93,7 @@ func SelfNamespace() (ns string, err error) {
 func ParseSecret(secret *v1.Secret) (SecretsValues, error) {
 	vs := make(SecretsValues, len(secret.Data))
 	for k, v := range secret.Data {
-		kb, err := base64.StdEncoding.DecodeString(string(v))
-		if err != nil {
-			return nil, err
-		}
-		vs[k] = string(kb)
+		vs[k] = string(v)
 	}
 
 	return vs, nil
