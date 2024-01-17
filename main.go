@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,13 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
+
+	ctx := context.Background()
+	go func() {
+		if err := secretStore.Watch(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	r := gin.Default()
 	r.Any("/", func(c *gin.Context) {

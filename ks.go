@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -11,11 +10,13 @@ import (
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 )
 
 type SecretsInterface interface {
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Secret, error)
+	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 }
 
 type SecretsValues map[string]string
@@ -56,12 +57,36 @@ func NewK8sSecretStore(clientSet *kubernetes.Clientset, opts ...StoreOption) (*k
 	return store, nil
 }
 
+func (s *k8sSecretStore) Watch(ctx context.Context) error {
+	watcher, err := s.secrets.Watch(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for event := range watcher.ResultChan() {
+		sec := event.Object.(*v1.Secret)
+
+		switch event.Type {
+		case watch.Added:
+			fmt.Printf("Service %s/%s added", sec.ObjectMeta.Namespace, sec.ObjectMeta.Name)
+		case watch.Modified:
+			fmt.Printf("Service %s/%s modified", sec.ObjectMeta.Namespace, sec.ObjectMeta.Name)
+
+			if _, ok := s.cache[sec.Name]; ok {
+				fmt.Println("update cached values")
+			}
+		case watch.Deleted:
+			fmt.Printf("Service %s/%s deleted", sec.ObjectMeta.Namespace, sec.ObjectMeta.Name)
+		}
+	}
+
+	return nil
+}
+
 func (s *k8sSecretStore) Get(ctx context.Context, secretName, key string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if values, ok := s.cache[secretName]; ok {
-		log.Println("gettin secret from cache...")
 		return GetSecretValue(values, key)
 	}
 
@@ -70,10 +95,7 @@ func (s *k8sSecretStore) Get(ctx context.Context, secretName, key string) (strin
 	if err != nil {
 		return "", err
 	}
-	values, err := ParseSecret(secret)
-	if err != nil {
-		return "", err
-	}
+	values := ParseSecret(secret)
 	s.cache[secretName] = values
 
 	return GetSecretValue(values, key)
@@ -90,13 +112,13 @@ func SelfNamespace() (ns string, err error) {
 	return
 }
 
-func ParseSecret(secret *v1.Secret) (SecretsValues, error) {
+func ParseSecret(secret *v1.Secret) SecretsValues {
 	vs := make(SecretsValues, len(secret.Data))
 	for k, v := range secret.Data {
 		vs[k] = string(v)
 	}
 
-	return vs, nil
+	return vs
 }
 
 func GetSecretValue(vals SecretsValues, key string) (string, error) {
